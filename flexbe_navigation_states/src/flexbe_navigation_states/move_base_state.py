@@ -5,7 +5,7 @@ from flexbe_core.proxy import ProxyActionClient
 
 from actionlib_msgs.msg import GoalStatus
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
-from geometry_msgs.msg import PoseStamped, Point, Quaternion
+from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 import rospy
 
 """
@@ -82,9 +82,13 @@ class MoveBaseState(EventState):
 
         # Create and populate action goal
         goal = MoveBaseGoal()
-
-        goal.target_pose = userdata.waypoint
         goal.target_pose.header.stamp = rospy.Time.now()
+        if isinstance(userdata.waypoint, Point):
+            goal.target_pose.pose.position = userdata.waypoint
+        elif isinstance(userdata.waypoint, Pose):
+            goal.target_pose.pose = userdata.waypoint
+        else:
+            goal.target_pose = userdata.waypoint
 
         # Send the action goal for execution
         try:
