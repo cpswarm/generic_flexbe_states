@@ -7,6 +7,7 @@ from actionlib_msgs.msg import GoalStatus
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 import rospy
+import copy
 
 """
 Created on 11/19/2015
@@ -15,6 +16,9 @@ Created on 11/19/2015
 
 Updated on 09/04/2021
 @github/tbazina
+
+Updated on 02/06/2023
+@github/tropappar
 """
 
 class MoveBaseState(EventState):
@@ -22,6 +26,9 @@ class MoveBaseState(EventState):
     Navigates a robot to a desired position and orientation using move_base.
 
     -- action_topic str                 move_base action topic, (/move_base)
+    -- altitude float                   Altitude in meters above ground to move at. Only used if the altitude of waypoint is below safe_alt.
+    -- safe_alt float                   Minimum altitude of waypoint below which the altitude parameter is used instead.
+
     ># waypoint     PoseStamped         Target waypoint for navigation.
 
     <= arrived                          Navigation to target pose succeeded.
@@ -29,7 +36,7 @@ class MoveBaseState(EventState):
     <= preempted                        Navigation to target pose preempted.
     """
 
-    def __init__(self, action_topic):
+    def __init__(self, action_topic, altitude, safe_alt=2.0):
         """Constructor"""
 
         super(MoveBaseState, self).__init__(
@@ -38,6 +45,8 @@ class MoveBaseState(EventState):
             )
 
         self._action_topic = action_topic
+        self._altitude = altitude
+        self._safe_alt = safe_alt
 
         self._client = ProxyActionClient({self._action_topic: MoveBaseAction})
 
@@ -84,11 +93,16 @@ class MoveBaseState(EventState):
         goal = MoveBaseGoal()
         goal.target_pose.header.stamp = rospy.Time.now()
         if isinstance(userdata.waypoint, Point):
-            goal.target_pose.pose.position = userdata.waypoint
+            goal.target_pose.pose.position = copy.copy(userdata.waypoint)
         elif isinstance(userdata.waypoint, Pose):
-            goal.target_pose.pose = userdata.waypoint
+            goal.target_pose.pose = copy.deepcopy(userdata.waypoint)
         else:
-            goal.target_pose = userdata.waypoint
+            goal.target_pose = copy.deepcopy(userdata.waypoint)
+
+        # Set altitude
+        if goal.target_pose.pose.position.z < self._safe_alt:
+            Logger.logwarn('Waypoint altitude %.2f < %.2f too low! Using parameter %.2f instead' % (goal.target_pose.pose.position.z, self._safe_alt, self._altitude))
+            goal.target_pose.pose.position.z = self._altitude
 
         # Send the action goal for execution
         try:
